@@ -24,10 +24,14 @@ def get_weather(latitude: float, longitude: float):
         ],
 
         "forecast_days": 3,
+
         "timezone": "auto"
     }
 
-    response = requests.get(url, params=params)
+    response = requests.get(
+        url,
+        params=params
+    )
 
     response.raise_for_status()
 
@@ -45,10 +49,16 @@ def search_locations(query: str):
         "format": "json"
     }
 
-    response = requests.get(url, params=params)
+    response = requests.get(
+        url,
+        params=params
+    )
 
     response.raise_for_status()
 
     data = response.json()
 
-    return data.get("results", [])
+    return data.get(
+        "results",
+        []
+    )

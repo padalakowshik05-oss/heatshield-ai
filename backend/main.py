@@ -1,7 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.weather_service import get_weather, search_locations
+from services.weather_service import (
+    get_weather,
+    search_locations
+)
+
+from routes.thermal import router as thermal_router
 
 
 app = FastAPI(
@@ -25,11 +30,23 @@ app.add_middleware(
 
 
 # -----------------------------
+# Thermal Router
+# -----------------------------
+
+app.include_router(
+    thermal_router,
+    prefix="/thermal",
+    tags=["Thermal Stress"]
+)
+
+
+# -----------------------------
 # Root
 # -----------------------------
 
 @app.get("/")
 def root():
+
     return {
         "message": "HeatShield AI API is running"
     }
@@ -40,9 +57,15 @@ def root():
 # -----------------------------
 
 @app.get("/weather/current")
-def current_weather(latitude: float, longitude: float):
+def current_weather(
+    latitude: float,
+    longitude: float
+):
 
-    weather = get_weather(latitude, longitude)
+    weather = get_weather(
+        latitude,
+        longitude
+    )
 
     current = weather["current"]
 
@@ -66,9 +89,15 @@ def current_weather(latitude: float, longitude: float):
 # -----------------------------
 
 @app.get("/weather/forecast")
-def weather_forecast(latitude: float, longitude: float):
+def weather_forecast(
+    latitude: float,
+    longitude: float
+):
 
-    weather = get_weather(latitude, longitude)
+    weather = get_weather(
+        latitude,
+        longitude
+    )
 
     daily = weather["daily"]
 
@@ -77,15 +106,24 @@ def weather_forecast(latitude: float, longitude: float):
     for i in range(3):
 
         forecast.append({
+
             "date": daily["time"][i],
 
-            "temperature": daily["temperature_2m_max"][i],
+            "temperature": daily[
+                "temperature_2m_max"
+            ][i],
 
-            "humidity": daily["relative_humidity_2m_mean"][i],
+            "humidity": daily[
+                "relative_humidity_2m_mean"
+            ][i],
 
-            "wind_speed": daily["wind_speed_10m_max"][i],
+            "wind_speed": daily[
+                "wind_speed_10m_max"
+            ][i],
 
-            "solar_radiation": daily["shortwave_radiation_sum"][i]
+            "solar_radiation": daily[
+                "shortwave_radiation_sum"
+            ][i]
         })
 
     return {
@@ -112,11 +150,24 @@ def location_search(query: str):
     for result in results:
 
         locations.append({
+
             "name": result.get("name"),
-            "latitude": result.get("latitude"),
-            "longitude": result.get("longitude"),
-            "country": result.get("country"),
-            "admin1": result.get("admin1")
+
+            "latitude": result.get(
+                "latitude"
+            ),
+
+            "longitude": result.get(
+                "longitude"
+            ),
+
+            "country": result.get(
+                "country"
+            ),
+
+            "admin1": result.get(
+                "admin1"
+            )
         })
 
     return {
