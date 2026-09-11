@@ -9,31 +9,58 @@ import RiskExplanation from "./components/RiskExplanation";
 
 function App() {
 
-  // --------------------------------
-  // State
-  // --------------------------------
+  // ============================================================
+  // STATE
+  // ============================================================
 
   const [weather, setWeather] = useState(null);
 
   const [thermal, setThermal] = useState(null);
+
+  const [vulnerability, setVulnerability] = useState(null);
+
+  const [risk, setRisk] = useState(null);
 
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState(null);
 
 
-  // --------------------------------
-  // Location
-  // --------------------------------
+  // ============================================================
+  // LOCATION
+  // ============================================================
 
   const latitude = 16.3067;
 
   const longitude = 80.4365;
 
 
-  // --------------------------------
-  // Load Data
-  // --------------------------------
+  // ============================================================
+  // DEMO VULNERABILITY DATA
+  //
+  // Later this will come from Supabase.
+  // ============================================================
+
+  const vulnerabilityData = {
+
+    elderly: 15,
+
+    children: 20,
+
+    outdoor_workers: 40,
+
+    population_density: 10000,
+
+    housing_vulnerability: 0.6,
+
+    healthcare_access: 0.7
+
+  };
+
+
+  // ============================================================
+  // LOAD DATA
+  // ============================================================
 
   useEffect(() => {
 
@@ -46,7 +73,9 @@ function App() {
         setError(null);
 
 
-        // Get weather
+        // ======================================================
+        // 1. GET CURRENT WEATHER
+        // ======================================================
 
         const weatherData =
           await getCurrentWeather(
@@ -54,15 +83,16 @@ function App() {
             longitude
           );
 
-
         setWeather(weatherData);
 
-
-        // Get thermal data
 
         const current =
           weatherData.current;
 
+
+        // ======================================================
+        // 2. GET THERMAL METRICS
+        // ======================================================
 
         const thermalResponse =
           await fetch(
@@ -89,6 +119,82 @@ function App() {
 
         setThermal(thermalData);
 
+
+        // ======================================================
+        // 3. GET VULNERABILITY
+        // ======================================================
+
+        const vulnerabilityResponse =
+          await fetch(
+            `http://localhost:8000/vulnerability/calculate` +
+            `?elderly=${vulnerabilityData.elderly}` +
+            `&children=${vulnerabilityData.children}` +
+            `&outdoor_workers=${vulnerabilityData.outdoor_workers}` +
+            `&population_density=${vulnerabilityData.population_density}` +
+            `&housing_vulnerability=${vulnerabilityData.housing_vulnerability}` +
+            `&healthcare_access=${vulnerabilityData.healthcare_access}`
+          );
+
+
+        if (!vulnerabilityResponse.ok) {
+
+          throw new Error(
+            "Failed to fetch vulnerability data"
+          );
+
+        }
+
+
+        const vulnerabilityResult =
+          await vulnerabilityResponse.json();
+
+
+        setVulnerability(
+          vulnerabilityResult
+        );
+
+
+        // ======================================================
+        // 4. GET HEAT-HEALTH RISK
+        //
+        // UTCI is not required here because the thermal
+        // endpoint currently returns the existing thermal
+        // metrics only.
+        //
+        // The current thermal stress score will be available
+        // after UTCI integration.
+        // ======================================================
+
+        if (
+          thermalData.thermal_stress_score !== undefined &&
+          thermalData.thermal_stress_score !== null
+        ) {
+
+          const riskResponse =
+            await fetch(
+              `http://localhost:8000/risk/calculate` +
+              `?thermal_stress=${thermalData.thermal_stress_score}` +
+              `&vulnerability=${vulnerabilityResult.vulnerability_score}`
+            );
+
+
+          if (!riskResponse.ok) {
+
+            throw new Error(
+              "Failed to fetch risk data"
+            );
+
+          }
+
+
+          const riskData =
+            await riskResponse.json();
+
+
+          setRisk(riskData);
+
+        }
+
       }
 
       catch (err) {
@@ -100,7 +206,8 @@ function App() {
 
 
         setError(
-          "Unable to load weather and thermal data."
+          err.message ||
+          "Unable to load dashboard data."
         );
 
       }
@@ -119,15 +226,22 @@ function App() {
   }, []);
 
 
-  // --------------------------------
-  // Loading
-  // --------------------------------
+  // ============================================================
+  // LOADING
+  // ============================================================
 
   if (loading) {
 
     return (
 
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+      <div className="
+        min-h-screen
+        bg-slate-950
+        text-white
+        flex
+        items-center
+        justify-center
+      ">
 
         <div className="text-center">
 
@@ -135,14 +249,12 @@ function App() {
             🔥
           </div>
 
-
           <h1 className="text-3xl font-bold">
             HeatShield AI
           </h1>
 
-
           <p className="text-slate-400 mt-2">
-            Loading thermal conditions...
+            Loading heat-health conditions...
           </p>
 
         </div>
@@ -154,15 +266,22 @@ function App() {
   }
 
 
-  // --------------------------------
-  // Error
-  // --------------------------------
+  // ============================================================
+  // ERROR
+  // ============================================================
 
   if (error) {
 
     return (
 
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+      <div className="
+        min-h-screen
+        bg-slate-950
+        text-white
+        flex
+        items-center
+        justify-center
+      ">
 
         <div className="text-center">
 
@@ -170,16 +289,13 @@ function App() {
             ⚠️
           </div>
 
-
           <h1 className="text-3xl font-bold">
             HeatShield AI
           </h1>
 
-
           <p className="text-red-400 mt-3">
             {error}
           </p>
-
 
           <p className="text-slate-500 mt-2">
             Make sure the FastAPI server is running.
@@ -194,9 +310,9 @@ function App() {
   }
 
 
-  // --------------------------------
-  // Weather Values
-  // --------------------------------
+  // ============================================================
+  // WEATHER VALUES
+  // ============================================================
 
   const temperature =
     weather?.current?.temperature;
@@ -211,9 +327,9 @@ function App() {
     weather?.current?.solar_radiation;
 
 
-  // --------------------------------
-  // Thermal Values
-  // --------------------------------
+  // ============================================================
+  // THERMAL VALUES
+  // ============================================================
 
   const heatIndex =
     thermal?.thermal_metrics?.heat_index;
@@ -227,33 +343,69 @@ function App() {
   const thermalScore =
     thermal?.thermal_stress_score;
 
+
+  // ============================================================
+  // VULNERABILITY VALUES
+  // ============================================================
+
+  const vulnerabilityScore =
+    vulnerability?.vulnerability_score;
+
+  const vulnerabilityCategory =
+    vulnerability?.category;
+
+
+  // ============================================================
+  // RISK VALUES
+  // ============================================================
+
+  const riskScore =
+    risk?.risk_score;
+
   const riskCategory =
-    thermal?.risk_category;
+    risk?.risk_category;
 
 
-  // --------------------------------
-  // Dashboard
-  // --------------------------------
+  // ============================================================
+  // DASHBOARD
+  // ============================================================
 
   return (
 
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="
+      min-h-screen
+      bg-slate-950
+      text-white
+    ">
 
 
-      {/* =================================
+      {/* ======================================================
           HEADER
-      ================================= */}
+      ====================================================== */}
 
-      <header className="border-b border-slate-800">
+      <header className="
+        border-b
+        border-slate-800
+      ">
 
-        <div className="max-w-6xl mx-auto px-6 py-6">
+        <div className="
+          max-w-6xl
+          mx-auto
+          px-6
+          py-6
+        ">
 
-          <h1 className="text-3xl font-bold">
+          <h1 className="
+            text-3xl
+            font-bold
+          ">
             🔥 HeatShield AI
           </h1>
 
-
-          <p className="text-slate-400 mt-1">
+          <p className="
+            text-slate-400
+            mt-1
+          ">
             Heat-Health Early Warning System
           </p>
 
@@ -262,42 +414,68 @@ function App() {
       </header>
 
 
-      {/* =================================
+      {/* ======================================================
           MAIN
-      ================================= */}
+      ====================================================== */}
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
+      <main className="
+        max-w-6xl
+        mx-auto
+        px-6
+        py-10
+      ">
 
 
-        {/* =================================
-            CURRENT WEATHER
-        ================================= */}
+        {/* ====================================================
+            WEATHER
+        ==================================================== */}
 
         <section>
 
-          <h2 className="text-xl font-semibold mb-5">
-            Current Weather
+          <h2 className="
+            text-xl
+            font-semibold
+            mb-5
+          ">
+            Weather
           </h2>
 
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="
+            grid
+            grid-cols-1
+            md:grid-cols-2
+            lg:grid-cols-4
+            gap-5
+          ">
 
 
             {/* Temperature */}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="
+              bg-slate-900
+              border
+              border-slate-800
+              rounded-xl
+              p-6
+            ">
 
               <div className="text-3xl">
                 🌡️
               </div>
 
-
-              <p className="text-slate-400 mt-4">
+              <p className="
+                text-slate-400
+                mt-4
+              ">
                 Temperature
               </p>
 
-
-              <p className="text-3xl font-bold mt-1">
+              <p className="
+                text-3xl
+                font-bold
+                mt-1
+              ">
 
                 {temperature !== undefined
                   ? `${temperature}°C`
@@ -310,19 +488,30 @@ function App() {
 
             {/* Humidity */}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="
+              bg-slate-900
+              border
+              border-slate-800
+              rounded-xl
+              p-6
+            ">
 
               <div className="text-3xl">
                 💧
               </div>
 
-
-              <p className="text-slate-400 mt-4">
+              <p className="
+                text-slate-400
+                mt-4
+              ">
                 Humidity
               </p>
 
-
-              <p className="text-3xl font-bold mt-1">
+              <p className="
+                text-3xl
+                font-bold
+                mt-1
+              ">
 
                 {humidity !== undefined
                   ? `${humidity}%`
@@ -335,19 +524,30 @@ function App() {
 
             {/* Wind */}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="
+              bg-slate-900
+              border
+              border-slate-800
+              rounded-xl
+              p-6
+            ">
 
               <div className="text-3xl">
                 💨
               </div>
 
-
-              <p className="text-slate-400 mt-4">
+              <p className="
+                text-slate-400
+                mt-4
+              ">
                 Wind
               </p>
 
-
-              <p className="text-3xl font-bold mt-1">
+              <p className="
+                text-3xl
+                font-bold
+                mt-1
+              ">
 
                 {wind !== undefined
                   ? `${wind} km/h`
@@ -360,19 +560,30 @@ function App() {
 
             {/* Solar */}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="
+              bg-slate-900
+              border
+              border-slate-800
+              rounded-xl
+              p-6
+            ">
 
               <div className="text-3xl">
                 ☀️
               </div>
 
-
-              <p className="text-slate-400 mt-4">
+              <p className="
+                text-slate-400
+                mt-4
+              ">
                 Solar Radiation
               </p>
 
-
-              <p className="text-3xl font-bold mt-1">
+              <p className="
+                text-3xl
+                font-bold
+                mt-1
+              ">
 
                 {solar !== undefined
                   ? `${solar} W/m²`
@@ -387,23 +598,36 @@ function App() {
         </section>
 
 
-        {/* =================================
+        {/* ====================================================
             THERMAL STRESS
-        ================================= */}
+        ==================================================== */}
 
         <section className="mt-10">
 
-          <h2 className="text-xl font-semibold mb-5">
+          <h2 className="
+            text-xl
+            font-semibold
+            mb-5
+          ">
             Thermal Stress
           </h2>
 
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
+          <div className="
+            bg-slate-900
+            border
+            border-slate-800
+            rounded-2xl
+            p-8
+          ">
 
 
-            {/* Thermal Metrics */}
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="
+              grid
+              grid-cols-1
+              md:grid-cols-3
+              gap-6
+            ">
 
 
               {/* Heat Index */}
@@ -414,13 +638,18 @@ function App() {
                   🔥
                 </div>
 
-
-                <p className="text-slate-400 mt-3">
+                <p className="
+                  text-slate-400
+                  mt-3
+                ">
                   Heat Index
                 </p>
 
-
-                <p className="text-3xl font-bold mt-1">
+                <p className="
+                  text-3xl
+                  font-bold
+                  mt-1
+                ">
 
                   {heatIndex !== undefined
                     ? `${heatIndex}°C`
@@ -439,13 +668,18 @@ function App() {
                   🌡️
                 </div>
 
-
-                <p className="text-slate-400 mt-3">
+                <p className="
+                  text-slate-400
+                  mt-3
+                ">
                   Estimated WBGT
                 </p>
 
-
-                <p className="text-3xl font-bold mt-1">
+                <p className="
+                  text-3xl
+                  font-bold
+                  mt-1
+                ">
 
                   {wbgt !== undefined
                     ? `${wbgt}°C`
@@ -464,15 +698,21 @@ function App() {
                   🌍
                 </div>
 
-
-                <p className="text-slate-400 mt-3">
+                <p className="
+                  text-slate-400
+                  mt-3
+                ">
                   UTCI
                 </p>
 
+                <p className="
+                  text-3xl
+                  font-bold
+                  mt-1
+                ">
 
-                <p className="text-3xl font-bold mt-1">
-
-                  {utci !== undefined
+                  {utci !== undefined &&
+                  utci !== null
                     ? `${utci}°C`
                     : "--"}
 
@@ -483,16 +723,191 @@ function App() {
             </div>
 
 
-            {/* Risk Card */}
+            {/* Thermal Score */}
 
-            <div className="mt-8">
+            <div className="
+              border-t
+              border-slate-800
+              mt-8
+              pt-6
+            ">
 
-              <ThermalRiskCard
-                riskCategory={riskCategory}
-                thermalScore={thermalScore}
-              />
+              <p className="
+                text-slate-400
+              ">
+                Thermal Stress Score
+              </p>
+
+              <p className="
+                text-4xl
+                font-bold
+                mt-1
+              ">
+
+                {thermalScore !== undefined &&
+                thermalScore !== null
+                  ? `${thermalScore} / 100`
+                  : "--"}
+
+              </p>
 
             </div>
+
+
+          </div>
+
+        </section>
+
+
+        {/* ====================================================
+            VULNERABILITY
+        ==================================================== */}
+
+        <section className="mt-10">
+
+          <h2 className="
+            text-xl
+            font-semibold
+            mb-5
+          ">
+            Vulnerability
+          </h2>
+
+
+          <div className="
+            bg-slate-900
+            border
+            border-slate-800
+            rounded-2xl
+            p-8
+          ">
+
+            <div className="
+              grid
+              grid-cols-1
+              md:grid-cols-2
+              gap-8
+            ">
+
+
+              {/* Score */}
+
+              <div>
+
+                <p className="
+                  text-slate-400
+                ">
+                  Vulnerability Score
+                </p>
+
+                <p className="
+                  text-5xl
+                  font-bold
+                  mt-2
+                ">
+
+                  {vulnerabilityScore !== undefined
+                    ? vulnerabilityScore
+                    : "--"}
+
+                </p>
+
+                <p className="
+                  text-slate-500
+                  mt-2
+                ">
+                  Out of 100
+                </p>
+
+              </div>
+
+
+              {/* Category */}
+
+              <div>
+
+                <p className="
+                  text-slate-400
+                ">
+                  Vulnerability Category
+                </p>
+
+                <p className="
+                  text-3xl
+                  font-bold
+                  mt-2
+                  text-orange-400
+                ">
+
+                  {vulnerabilityCategory || "--"}
+
+                </p>
+
+                <p className="
+                  text-slate-500
+                  mt-2
+                ">
+                  Based on population vulnerability factors
+                </p>
+
+              </div>
+
+            </div>
+
+
+            <div className="
+              border-t
+              border-slate-800
+              mt-8
+              pt-5
+            ">
+
+              <p className="
+                text-xs
+                text-slate-500
+              ">
+                Demo vulnerability profile. This will later
+                be replaced with location-specific data from
+                Supabase.
+              </p>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+        {/* ====================================================
+            HEAT HEALTH RISK
+        ==================================================== */}
+
+        <section className="mt-10">
+
+          <h2 className="
+            text-xl
+            font-semibold
+            mb-5
+          ">
+            Heat Health Risk
+          </h2>
+
+
+          <div className="
+            bg-slate-900
+            border
+            border-slate-800
+            rounded-2xl
+            p-8
+          ">
+
+
+            {/* Risk Card */}
+
+            <ThermalRiskCard
+              riskCategory={riskCategory}
+              thermalScore={riskScore}
+            />
 
 
             {/* Risk Explanation */}
@@ -504,21 +919,35 @@ function App() {
                 humidity={humidity}
                 solarRadiation={solar}
                 windSpeed={wind}
+                heatIndex={heatIndex}
+                wbgt={wbgt}
+                utci={utci}
+                thermalScore={thermalScore}
+                vulnerabilityScore={vulnerabilityScore}
+                vulnerabilityCategory={
+                  vulnerabilityCategory
+                }
+                riskScore={riskScore}
+                riskCategory={riskCategory}
               />
 
             </div>
-
 
           </div>
 
         </section>
 
 
-        {/* =================================
+        {/* ====================================================
             FOOTER
-        ================================= */}
+        ==================================================== */}
 
-        <footer className="text-center text-slate-500 mt-10 pb-6">
+        <footer className="
+          text-center
+          text-slate-500
+          mt-10
+          pb-6
+        ">
 
           <p>
             HeatShield AI • Heat-Health Early Warning System
@@ -532,7 +961,6 @@ function App() {
     </div>
 
   );
-
 }
 
 

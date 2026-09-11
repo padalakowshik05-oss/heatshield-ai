@@ -6,8 +6,22 @@ from services.weather_service import (
     search_locations
 )
 
-from routes.thermal import router as thermal_router
+from routes.thermal import (
+    router as thermal_router
+)
 
+from routes.vulnerability import (
+    router as vulnerability_router
+)
+
+from routes.risk import (
+    router as risk_router
+)
+
+
+# ============================================================
+# FASTAPI APPLICATION
+# ============================================================
 
 app = FastAPI(
     title="HeatShield AI",
@@ -16,23 +30,26 @@ app = FastAPI(
 )
 
 
-# -----------------------------
+# ============================================================
 # CORS
-# -----------------------------
+# ============================================================
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# -----------------------------
-# Thermal Router
-# -----------------------------
+# ============================================================
+# ROUTERS
+# ============================================================
 
+# Thermal Stress API
 app.include_router(
     thermal_router,
     prefix="/thermal",
@@ -40,9 +57,25 @@ app.include_router(
 )
 
 
-# -----------------------------
-# Root
-# -----------------------------
+# Vulnerability API
+app.include_router(
+    vulnerability_router,
+    prefix="/vulnerability",
+    tags=["Vulnerability"]
+)
+
+
+# Heat Health Risk API
+app.include_router(
+    risk_router,
+    prefix="/risk",
+    tags=["Heat Health Risk"]
+)
+
+
+# ============================================================
+# ROOT
+# ============================================================
 
 @app.get("/")
 def root():
@@ -52,9 +85,9 @@ def root():
     }
 
 
-# -----------------------------
-# Current Weather
-# -----------------------------
+# ============================================================
+# CURRENT WEATHER
+# ============================================================
 
 @app.get("/weather/current")
 def current_weather(
@@ -76,17 +109,24 @@ def current_weather(
         },
 
         "current": {
-            "temperature": current["temperature_2m"],
-            "humidity": current["relative_humidity_2m"],
-            "wind_speed": current["wind_speed_10m"],
-            "solar_radiation": current["shortwave_radiation"]
+            "temperature":
+                current["temperature_2m"],
+
+            "humidity":
+                current["relative_humidity_2m"],
+
+            "wind_speed":
+                current["wind_speed_10m"],
+
+            "solar_radiation":
+                current["shortwave_radiation"]
         }
     }
 
 
-# -----------------------------
-# 3-Day Forecast
-# -----------------------------
+# ============================================================
+# WEATHER FORECAST
+# ============================================================
 
 @app.get("/weather/forecast")
 def weather_forecast(
@@ -106,24 +146,20 @@ def weather_forecast(
     for i in range(3):
 
         forecast.append({
+            "date":
+                daily["time"][i],
 
-            "date": daily["time"][i],
+            "temperature":
+                daily["temperature_2m_max"][i],
 
-            "temperature": daily[
-                "temperature_2m_max"
-            ][i],
+            "humidity":
+                daily["relative_humidity_2m_mean"][i],
 
-            "humidity": daily[
-                "relative_humidity_2m_mean"
-            ][i],
+            "wind_speed":
+                daily["wind_speed_10m_max"][i],
 
-            "wind_speed": daily[
-                "wind_speed_10m_max"
-            ][i],
-
-            "solar_radiation": daily[
-                "shortwave_radiation_sum"
-            ][i]
+            "solar_radiation":
+                daily["shortwave_radiation_sum"][i]
         })
 
     return {
@@ -136,38 +172,38 @@ def weather_forecast(
     }
 
 
-# -----------------------------
-# Location Search
-# -----------------------------
+# ============================================================
+# LOCATION SEARCH
+# ============================================================
 
 @app.get("/locations/search")
-def location_search(query: str):
+def location_search(
+    query: str
+):
 
-    results = search_locations(query)
+    results = search_locations(
+        query
+    )
 
     locations = []
 
     for result in results:
 
         locations.append({
+            "name":
+                result.get("name"),
 
-            "name": result.get("name"),
+            "latitude":
+                result.get("latitude"),
 
-            "latitude": result.get(
-                "latitude"
-            ),
+            "longitude":
+                result.get("longitude"),
 
-            "longitude": result.get(
-                "longitude"
-            ),
+            "country":
+                result.get("country"),
 
-            "country": result.get(
-                "country"
-            ),
-
-            "admin1": result.get(
-                "admin1"
-            )
+            "admin1":
+                result.get("admin1")
         })
 
     return {
