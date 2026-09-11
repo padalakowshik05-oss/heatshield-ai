@@ -1,9 +1,15 @@
-from fastapi import FastAPI
+import os
+import sys
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.weather_service import (
     get_weather,
     search_locations
+)
+
+from routes.weather import (
+    router as weather_router
 )
 
 from routes.thermal import (
@@ -17,6 +23,34 @@ from routes.vulnerability import (
 from routes.risk import (
     router as risk_router
 )
+
+from routes.prediction import (
+    router as prediction_router
+)
+
+from routes.alerts import (
+    router as alerts_router,
+    get_explanation
+)
+
+from routes.assistant import (
+    router as assistant_router
+)
+
+from routes.dashboard import (
+    router as dashboard_router
+)
+
+from routes.auth import (
+    router as auth_router,
+    get_current_user,
+    UserProfile,
+)
+from routes.alerts import get_email_alert_status
+from services.monitoring_service import start_monitoring_scheduler, get_monitoring_status
+from services.auth_service import check_db_health, get_db_type
+from services.email_service import get_email_status
+from services.ml_service import is_model_available
 
 
 # ============================================================
@@ -34,11 +68,31 @@ app = FastAPI(
 # CORS
 # ============================================================
 
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://[::1]:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://[::1]:5174",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+if frontend_url:
+    allowed_origins.append(frontend_url.rstrip("/"))
+
+additional_cors = os.getenv("ADDITIONAL_CORS_ORIGINS", "").strip()
+if additional_cors:
+    for orig in additional_cors.split(","):
+        if orig.strip():
+            allowed_origins.append(orig.strip().rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173"
-    ],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$|^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +102,13 @@ app.add_middleware(
 # ============================================================
 # ROUTERS
 # ============================================================
+
+# Weather API (Open-Meteo Integration)
+app.include_router(
+    weather_router,
+    prefix="/weather",
+    tags=["Weather"]
+)
 
 # Thermal Stress API
 app.include_router(
@@ -72,9 +133,64 @@ app.include_router(
     tags=["Heat Health Risk"]
 )
 
+# Future Risk Prediction API
+app.include_router(
+    prediction_router,
+    prefix="/prediction",
+    tags=["Prediction"]
+)
+
+# Alerts & Heat Early Warning API
+app.include_router(
+    alerts_router,
+    prefix="/alerts",
+    tags=["Alerts"]
+)
+
+# AI Heat-Health Assistant API
+app.include_router(
+    assistant_router,
+    prefix="/assistant",
+    tags=["Assistant"]
+)
+
+# Consolidated Dashboard API (Step 9)
+app.include_router(
+    dashboard_router,
+    prefix="/dashboard",
+    tags=["Dashboard"]
+)
+
+# Authentication API (Step 11)
+app.include_router(
+    auth_router,
+    prefix="/auth",
+    tags=["Authentication"]
+)
+
+# Root-level SHAP Explainability API (Section 7 specification)
+app.add_api_route(
+    "/explanation",
+    get_explanation,
+    methods=["POST"],
+    tags=["Explanation"]
+)
+
+
+@app.on_event("startup")
+def on_startup():
+    # Start autonomous real-time heat monitoring background scheduler
+    start_monitoring_scheduler(interval_seconds=300)
+
+
+@app.get("/notifications/email/status", tags=["Notifications"])
+def notifications_email_status(current_user: UserProfile = Depends(get_current_user)):
+    return get_email_alert_status(current_user)
+
+
 
 # ============================================================
-# ROOT
+# ROOT & HEALTH CHECK
 # ============================================================
 
 @app.get("/")
@@ -85,90 +201,33 @@ def root():
     }
 
 
-# ============================================================
-# CURRENT WEATHER
-# ============================================================
+@app.get("/health")
+def health_check():
+    db_healthy = check_db_health()
+    db_type = get_db_type()
+    scheduler_status = get_monitoring_status()
+    email_status = get_email_status()
+    model_loaded = is_model_available()
 
-@app.get("/weather/current")
-def current_weather(
-    latitude: float,
-    longitude: float
-):
-
-    weather = get_weather(
-        latitude,
-        longitude
-    )
-
-    current = weather["current"]
+    overall_healthy = db_healthy and model_loaded
 
     return {
-        "location": {
-            "latitude": latitude,
-            "longitude": longitude
+        "status": "healthy" if overall_healthy else "degraded",
+        "service": "HeatShield AI API",
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "database": {
+            "status": "connected" if db_healthy else "disconnected",
+            "engine": db_type,
         },
-
-        "current": {
-            "temperature":
-                current["temperature_2m"],
-
-            "humidity":
-                current["relative_humidity_2m"],
-
-            "wind_speed":
-                current["wind_speed_10m"],
-
-            "solar_radiation":
-                current["shortwave_radiation"]
+        "scheduler": {
+            "running": scheduler_status.get("scheduler_running", False),
+            "interval_seconds": scheduler_status.get("scheduler_interval_seconds", 300),
+        },
+        "model_loaded": model_loaded,
+        "email": {
+            "provider": email_status.get("provider", "resend"),
+            "configured": email_status.get("configured", False),
         }
-    }
-
-
-# ============================================================
-# WEATHER FORECAST
-# ============================================================
-
-@app.get("/weather/forecast")
-def weather_forecast(
-    latitude: float,
-    longitude: float
-):
-
-    weather = get_weather(
-        latitude,
-        longitude
-    )
-
-    daily = weather["daily"]
-
-    forecast = []
-
-    for i in range(3):
-
-        forecast.append({
-            "date":
-                daily["time"][i],
-
-            "temperature":
-                daily["temperature_2m_max"][i],
-
-            "humidity":
-                daily["relative_humidity_2m_mean"][i],
-
-            "wind_speed":
-                daily["wind_speed_10m_max"][i],
-
-            "solar_radiation":
-                daily["shortwave_radiation_sum"][i]
-        })
-
-    return {
-        "location": {
-            "latitude": latitude,
-            "longitude": longitude
-        },
-
-        "forecast": forecast
     }
 
 
@@ -209,3 +268,10 @@ def location_search(
     return {
         "locations": locations
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8001"))
+    uvicorn.run("main:app", host=host, port=port, reload=False)

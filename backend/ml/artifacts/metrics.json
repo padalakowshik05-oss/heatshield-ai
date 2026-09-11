@@ -1,0 +1,101 @@
+{
+  "scientific_disclaimer": "The prototype ML model predicts future HeatShield-derived heat-health risk from environmental and vulnerability features. It is not a clinical prediction model and does not directly predict individual medical outcomes.",
+  "training_data_source": "Prototype meteorological time-series for 19 West Godavari mandals with HeatShield risk formulas",
+  "horizon_hours": 6,
+  "total_samples": 81510,
+  "train_samples": 65208,
+  "test_samples": 16302,
+  "feature_count": 35,
+  "feature_columns": [
+    "hour",
+    "day_of_week",
+    "month",
+    "temperature",
+    "humidity",
+    "wind_speed",
+    "solar_radiation",
+    "heat_index",
+    "estimated_wbgt",
+    "estimated_utci",
+    "thermal_stress_score",
+    "elderly",
+    "children",
+    "outdoor_workers",
+    "population_density",
+    "housing_vulnerability",
+    "healthcare_vulnerability",
+    "vulnerability_score",
+    "temperature_lag_1",
+    "temperature_lag_3",
+    "temperature_lag_6",
+    "temperature_lag_24",
+    "humidity_lag_1",
+    "wbgt_lag_1",
+    "wbgt_lag_3",
+    "risk_lag_1",
+    "risk_lag_3",
+    "risk_lag_6",
+    "temperature_3h_avg",
+    "temperature_6h_avg",
+    "temperature_24h_avg",
+    "wbgt_3h_avg",
+    "wbgt_6h_avg",
+    "risk_3h_avg",
+    "risk_6h_avg"
+  ],
+  "baseline_model": {
+    "name": "DummyRegressor(strategy='mean')",
+    "mae": 34.1012,
+    "rmse": 34.8169,
+    "r2": -23.5768,
+    "category_accuracy": 0.0
+  },
+  "main_model": {
+    "name": "XGBoost Regressor",
+    "version": "prototype-v1",
+    "hyperparameters": {
+      "n_estimators": 120,
+      "max_depth": 5,
+      "learning_rate": 0.08
+    },
+    "mae": 1.6929,
+    "rmse": 2.219,
+    "r2": 0.9002,
+    "category_accuracy": 0.9455,
+    "category_precision_macro": 0.4722,
+    "category_recall_macro": 0.4739,
+    "category_f1_macro": 0.4726,
+    "confusion_matrix": [
+      [
+        8231,
+        690,
+        0,
+        0
+      ],
+      [
+        199,
+        7182,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "category_labels": [
+      "LOW",
+      "MODERATE",
+      "HIGH",
+      "EXTREME"
+    ]
+  }
+}
