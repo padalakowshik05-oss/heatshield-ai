@@ -22,7 +22,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
-from services.weather_service import get_weather
+from services.weather_service import get_weather, get_current_weather
 from services.thermal_service import calculate_thermal_metrics
 from services.vulnerability_service import get_vulnerability_data
 from services.risk_service import calculate_final_risk, get_risk_category
@@ -117,7 +117,7 @@ def evaluate_location_risk_and_notify(
 
     # 1. Fetch live Open-Meteo weather
     try:
-        weather = get_weather(latitude, longitude)
+        weather = get_current_weather(latitude, longitude)
     except Exception as exc:
         logger.warning(
             f"[MONITORING] Open-Meteo unavailable for {clean_area} ({latitude}, {longitude}): {exc}. "
