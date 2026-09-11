@@ -114,6 +114,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> UserProfile
 # ============================================================
 
 @router.post("/register", response_model=AuthResponse)
+@router.post("/signup", response_model=AuthResponse)
 def register(req: RegisterRequest):
     """Register a new user account."""
     clean_email = req.email.strip().lower()

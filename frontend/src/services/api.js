@@ -20,6 +20,12 @@ export const API_BASE_URL = (
     : "")
 ).replace(/\/+$/, "");
 
+export function isMissingApiBaseUrl() {
+  if (API_BASE_URL) return false;
+  if (typeof window === "undefined") return false;
+  return window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+}
+
 const REQUEST_TIMEOUT_MS = 4000;
 
 /**
@@ -39,6 +45,96 @@ export function getCandidateUrls(url) {
 }
 
 /**
+ * Safely parse HTTP responses from the backend or hosting layer.
+ * Prevents "Unexpected end of JSON input" errors when responses are empty, HTML, or error pages.
+ */
+export async function handleApiResponse(response, requestUrl = "") {
+  let text = "";
+  try {
+    text = await response.text();
+  } catch (err) {
+    throw new Error(`Failed to read response from server: ${err.message}`);
+  }
+
+  let json = null;
+  let isJson = false;
+  if (text && text.trim()) {
+    try {
+      json = JSON.parse(text);
+      isJson = true;
+    } catch {
+      isJson = false;
+    }
+  }
+
+  if (!response.ok) {
+    // 1. Structured JSON errors from FastAPI / Pydantic
+    if (isJson && json) {
+      const msg = json.detail || json.message || json.error;
+      if (typeof msg === "string" && msg.trim()) {
+        throw new Error(msg);
+      }
+      if (Array.isArray(msg) && msg.length > 0) {
+        const combined = msg
+          .map((m) => (typeof m === "object" && m.msg ? m.msg : String(m)))
+          .join(", ");
+        if (combined) throw new Error(combined);
+      }
+      if (typeof json === "object") {
+        try {
+          const str = JSON.stringify(json);
+          if (str && str !== "{}") throw new Error(str);
+        } catch {
+          // continue
+        }
+      }
+    }
+
+    // 2. HTTP 405 Method Not Allowed (Static SPA host intercepted API POST)
+    if (response.status === 405) {
+      throw new Error(
+        `HTTP 405 Method Not Allowed: The request was sent to a static host rather than the backend API. Please configure VITE_API_BASE_URL to point to your live backend server.`
+      );
+    }
+
+    // 3. HTTP 404 Not Found
+    if (response.status === 404) {
+      throw new Error(`API endpoint not found (HTTP 404): ${requestUrl}`);
+    }
+
+    // 4. HTTP 502 / 503 / 504 Bad Gateway / Service Unavailable
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new Error(
+        `Backend service is unavailable (HTTP ${response.status}). Please check backend deployment status.`
+      );
+    }
+
+    // 5. Short plain-text error from server
+    if (text && !text.startsWith("<!") && text.length < 200) {
+      throw new Error(text.trim());
+    }
+
+    throw new Error(`Request failed with status ${response.status}: ${response.statusText}`);
+  }
+
+  if (isJson && json !== null) {
+    return json;
+  }
+
+  if (!text || !text.trim()) {
+    return {};
+  }
+
+  if (text.startsWith("<!doctype") || text.startsWith("<html")) {
+    throw new Error(
+      `Received HTML page instead of API JSON from ${requestUrl}. Ensure VITE_API_BASE_URL points to the live backend server.`
+    );
+  }
+
+  return { raw: text };
+}
+
+/**
  * Helper to fetch JSON with timeout, retry on 127.0.0.1 for Windows IPv6/IPv4 mismatch
  */
 async function fetchJson(url) {
@@ -50,14 +146,11 @@ async function fetchJson(url) {
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(candidate, { signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-      }
-      return await response.json();
-    } catch (err) {
-      lastError = err;
-    } finally {
       clearTimeout(timeoutId);
+      return await handleApiResponse(response, candidate);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err;
     }
   }
 
@@ -202,13 +295,8 @@ export async function getFuturePrediction(areaName, latitude, longitude) {
         signal: controller.signal,
       });
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.detail || `HTTP error ${response.status}: ${response.statusText}`);
-      }
-
       clearTimeout(timeoutId);
-      return await response.json();
+      return await handleApiResponse(response, url);
     } catch (err) {
       clearTimeout(timeoutId);
       lastError = err;
@@ -259,13 +347,8 @@ export async function getAreaExplanation(areaName, latitude, longitude) {
         signal: controller.signal,
       });
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.detail || `HTTP error ${response.status}`);
-      }
-
       clearTimeout(timeoutId);
-      return await response.json();
+      return await handleApiResponse(response, url);
     } catch (err) {
       clearTimeout(timeoutId);
       lastError = err;
@@ -309,9 +392,7 @@ export async function markAlertRead(alertId) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, url);
     } catch {
       // try next
     }
@@ -330,9 +411,7 @@ export async function markAllAlertsRead(areaName) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
-    if (response.ok) {
-      return await response.json();
-    }
+    return await handleApiResponse(response, url);
   } catch {
     // fallback
   }
@@ -387,8 +466,8 @@ export async function askAiAssistant(question, currentLocation) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (response.ok) {
-        const data = await response.json();
+      const data = await handleApiResponse(response, url);
+      if (data && data.response) {
         return data.response;
       }
     } catch {
@@ -488,6 +567,12 @@ export async function getWardsData(areaName) {
  */
 
 export async function loginUser(identifier, password, rememberMe = false) {
+  if (isMissingApiBaseUrl()) {
+    throw new Error(
+      "Backend API URL is not configured. Please configure VITE_API_BASE_URL in your deployment environment variables (e.g. Vercel) to point to your live backend server."
+    );
+  }
+
   const url = `${API_BASE_URL}/auth/login`;
   const urls = getCandidateUrls(url);
 
@@ -504,13 +589,18 @@ export async function loginUser(identifier, password, rememberMe = false) {
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Invalid email or password");
-      }
-      return data;
+      return await handleApiResponse(response, u);
     } catch (err) {
       lastError = err;
+      if (
+        err.message &&
+        !err.message.includes("404") &&
+        !err.message.includes("405") &&
+        !err.message.includes("Failed to fetch") &&
+        !err.message.includes("NetworkError")
+      ) {
+        throw err;
+      }
     }
   }
 
@@ -518,8 +608,17 @@ export async function loginUser(identifier, password, rememberMe = false) {
 }
 
 export async function registerUser({ fullName, email, password, username }) {
-  const url = `${API_BASE_URL}/auth/register`;
-  const urls = getCandidateUrls(url);
+  if (isMissingApiBaseUrl()) {
+    throw new Error(
+      "Backend API URL is not configured. Please configure VITE_API_BASE_URL in your deployment environment variables (e.g. Vercel) to point to your live backend server."
+    );
+  }
+
+  const primaryUrl = `${API_BASE_URL}/auth/register`;
+  const fallbackUrl = `${API_BASE_URL}/auth/signup`;
+  const primaryCandidates = getCandidateUrls(primaryUrl);
+  const fallbackCandidates = getCandidateUrls(fallbackUrl);
+  const urls = [...primaryCandidates, ...fallbackCandidates];
 
   let lastError = null;
   for (const u of urls) {
@@ -535,13 +634,18 @@ export async function registerUser({ fullName, email, password, username }) {
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Registration failed");
-      }
-      return data;
+      return await handleApiResponse(response, u);
     } catch (err) {
       lastError = err;
+      if (
+        err.message &&
+        !err.message.includes("404") &&
+        !err.message.includes("405") &&
+        !err.message.includes("Failed to fetch") &&
+        !err.message.includes("NetworkError")
+      ) {
+        throw err;
+      }
     }
   }
 
@@ -558,9 +662,7 @@ export async function getCurrentUser(token) {
       const response = await fetch(u, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, u);
     } catch {
       // try next url
     }
@@ -600,9 +702,7 @@ export async function evaluateEmailAlert(alertPayload, token) {
         },
         body: JSON.stringify(alertPayload),
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, u);
     } catch {
       // try next url
     }
@@ -625,11 +725,7 @@ export async function sendDemoEmail(token) {
           Authorization: `Bearer ${token}`,
         },
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || data.error || data.message || "Failed to send demo email");
-      }
-      return data;
+      return await handleApiResponse(response, u);
     } catch (err) {
       lastError = err;
     }
@@ -652,9 +748,7 @@ export async function setMonitoredLocation(locationPayload, token) {
         },
         body: JSON.stringify(locationPayload),
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, u);
     } catch {
       // try next url
     }
@@ -672,9 +766,7 @@ export async function getMonitoredLocation(token) {
       const response = await fetch(u, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, u);
     } catch {
       // try next url
     }
@@ -692,9 +784,7 @@ export async function getEmailAlertHistory(token) {
       const response = await fetch(u, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, u);
     } catch {
       // try next url
     }
@@ -712,9 +802,7 @@ export async function getEmailStatus(token) {
       const response = await fetch(u, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.ok) {
-        return await response.json();
-      }
+      return await handleApiResponse(response, u);
     } catch {
       // try next url
     }

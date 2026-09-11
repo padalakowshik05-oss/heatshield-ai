@@ -117,7 +117,21 @@ def evaluate_location_risk_and_notify(
 
     # 1. Fetch live Open-Meteo weather
     try:
-        weather = get_current_weather(latitude, longitude)
+        raw_weather = get_weather(latitude, longitude)
+        if isinstance(raw_weather, dict) and "temperature" in raw_weather:
+            weather = raw_weather
+        elif isinstance(raw_weather, dict) and "current" in raw_weather:
+            current = raw_weather.get("current", {})
+            weather = {
+                "latitude": latitude,
+                "longitude": longitude,
+                "temperature": current.get("temperature_2m"),
+                "humidity": current.get("relative_humidity_2m"),
+                "wind_speed": current.get("wind_speed_10m", 10.0),
+                "solar_radiation": current.get("shortwave_radiation", 500.0),
+            }
+        else:
+            weather = raw_weather or {}
     except Exception as exc:
         logger.warning(
             f"[MONITORING] Open-Meteo unavailable for {clean_area} ({latitude}, {longitude}): {exc}. "

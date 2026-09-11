@@ -2,7 +2,7 @@
 // HeatShield AI — Weather & Thermal Service
 // ============================================================================
 
-import { API_BASE_URL, getCandidateUrls } from "./api";
+import { API_BASE_URL, getCandidateUrls, handleApiResponse } from "./api";
 
 const API_URL = API_BASE_URL;
 
@@ -14,10 +14,7 @@ async function fetchWithCandidateFallback(url) {
   for (const u of urls) {
     try {
       const res = await fetch(u);
-      if (res.ok) {
-        return await res.json();
-      }
-      throw new Error(`HTTP error ${res.status}: ${res.statusText}`);
+      return await handleApiResponse(res, u);
     } catch (err) {
       lastError = err;
     }
