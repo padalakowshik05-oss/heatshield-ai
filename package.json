@@ -1,0 +1,11 @@
+{
+  "name": "heatshield-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HeatShield AI — Hyperlocal Heat-Health Early Warning System",
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "install": "npm --prefix frontend install",
+    "dev": "npm --prefix frontend run dev"
+  }
+}
