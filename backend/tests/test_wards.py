@@ -14,8 +14,8 @@ def test_get_wards_tadepalligudem():
     assert response.status_code == 200
     data = response.json()
     assert data["area"] == "Tadepalligudem"
-    assert data["data_type"] == "prototype"
-    assert "Ward-level risk values are prototype estimates" in data["disclaimer"]
+    assert data["data_type"] in ["live_model", "prototype"]
+    assert "disclaimer" in data
     assert data["count"] >= 10
     assert len(data["wards"]) == data["count"]
 

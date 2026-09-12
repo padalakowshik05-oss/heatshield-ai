@@ -32,7 +32,8 @@ import {
   setMonitoredLocation,
 } from "./services/api";
 
-const POLLING_INTERVAL_MS = 60000; // 60-second polling for active selected area
+const POLLING_INTERVAL_MS = 60000; // 60-second polling for active selected area alert status
+const WEATHER_POLL_INTERVAL_MS = 300000; // 5-minute periodic refresh for live weather/risk telemetry
 
 const INITIAL_LOCATION = {
   mode: "manual",
@@ -42,7 +43,8 @@ const INITIAL_LOCATION = {
   area: "Tadepalligudem",
   latitude: 16.8152,
   longitude: 81.5267,
-  ...WEST_GODAVARI_LOCATIONS[0],
+  mandals: "Tadepalligudem Urban & Agricultural Belt",
+  vulnerablePopulation: 18400,
 };
 
 
@@ -284,6 +286,13 @@ export function App() {
     const currentReqId = ++activeRequestIdRef.current;
 
     // 1. Reset metrics and trigger section loading indicators (prevent stale displays)
+    setLiveWeather(null);
+    setLiveThermal(null);
+    setLiveRisk(null);
+    setLivePrediction(null);
+    setLiveForecast(null);
+    setIsLiveBackend(false);
+
     setIsLoadingWeather(true);
     setIsLoadingThermal(true);
     setIsLoadingRisk(true);
@@ -377,9 +386,17 @@ export function App() {
           setLiveNearby(summary.nearby_summary);
         }
 
-        // Backend Timestamp
-        if (summary.last_updated) {
-          setLastUpdatedTime(summary.last_updated);
+        // Backend Timestamp formatted to human-readable local time (e.g., 10:32 PM)
+        if (summary.last_updated || summary.timestamp) {
+          try {
+            const d = new Date(summary.last_updated || summary.timestamp);
+            const formatted = isNaN(d.getTime())
+              ? new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })
+              : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+            setLastUpdatedTime(formatted);
+          } catch {
+            setLastUpdatedTime(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }));
+          }
         }
 
         // Notification feed dynamic update
@@ -771,12 +788,24 @@ export function App() {
 
   // Fetch live weather, thermal, and risk calculations for initial default location on mount
   useEffect(() => {
-    loadLocationData(WEST_GODAVARI_LOCATIONS[0]);
+    loadLocationData(INITIAL_LOCATION);
   }, [loadLocationData]);
 
-  // Merge live telemetry if backend is reachable, otherwise fallback to verified mock baseline
+  // 5-minute periodic refresh for live weather, thermal, and risk data
+  useEffect(() => {
+    if (!selectedLocation) return;
+
+    const weatherTimer = setInterval(() => {
+      loadLocationData(selectedLocation);
+    }, WEATHER_POLL_INTERVAL_MS);
+
+    return () => {
+      clearInterval(weatherTimer);
+    };
+  }, [selectedLocation, loadLocationData]);
+
+  // Merge live telemetry if backend is reachable, otherwise strictly report nulls
   const activeLocation = {
-    ...selectedLocation,
     mode: selectedLocation?.mode || "manual",
     id: selectedLocation?.id || "tadepalligudem",
     name: selectedLocation?.name || "Tadepalligudem",
@@ -784,57 +813,39 @@ export function App() {
     area: selectedLocation?.area || selectedLocation?.name || "Tadepalligudem",
     latitude: selectedLocation?.latitude != null ? Number(selectedLocation.latitude) : 16.8152,
     longitude: selectedLocation?.longitude != null ? Number(selectedLocation.longitude) : 81.5267,
-    ...(isLiveBackend && liveWeather
-      ? {
-          temperature: liveWeather.temperature,
-          humidity: liveWeather.humidity,
-          windSpeed: liveWeather.windSpeed,
-          solarRadiation: liveWeather.solarRadiation,
-        }
-      : {}),
-    ...(liveThermal
-      ? {
-          heatIndex: liveThermal.heatIndex,
-          heatIndexStatus: liveThermal.heatIndexStatus,
-          wbgt: liveThermal.wbgt,
-          wbgtType: liveThermal.wbgtType,
-          wbgtMethod: liveThermal.wbgtMethod,
-          utci: liveThermal.utci,
-          utciType: liveThermal.utciType,
-          utciStatus: liveThermal.utciStatus,
-          thermalStressScore: liveThermal.thermalStressScore,
-          thermalStressCategory: liveThermal.thermalStressCategory,
-        }
-      : {}),
-    ...(liveRisk
-      ? {
-          riskScore: liveRisk.riskScore,
-          riskCategory: liveRisk.riskCategory,
-          mainRiskFactor: liveRisk.explanation,
-          vulnerabilityScore: liveRisk.vulnerabilityScore,
-          vulnerabilityFactors: liveRisk.vulnerabilityFactors,
-        }
-      : {}),
-    ...(livePrediction?.prediction
-      ? {
-          predictedRisk: livePrediction.prediction.predicted_risk_score,
-          predictedCategory: livePrediction.prediction.predicted_risk_category,
-          trend: livePrediction.prediction.trend,
-          trendDiff: livePrediction.prediction.trend_diff,
-        }
-      : {}),
-    ...(liveAlert?.alert
-      ? {
-          alertLevel: liveAlert.alert.level,
-          alertPriority: liveAlert.alert.priority,
-          alertTitle: liveAlert.alert.title,
-          alertMessage: liveAlert.alert.message,
-          recommendedActions: liveAlert.recommended_actions,
-        }
-      : {}),
-    ...(liveForecast ? { forecast: liveForecast } : {}),
-    ...(liveNearby ? { nearbySummary: liveNearby } : {}),
-    ...(lastUpdatedTime ? { lastUpdated: lastUpdatedTime } : {}),
+    mandals: selectedLocation?.mandals || "",
+    vulnerablePopulation: selectedLocation?.vulnerablePopulation || 0,
+    temperature: isLiveBackend && liveWeather ? liveWeather.temperature : null,
+    humidity: isLiveBackend && liveWeather ? liveWeather.humidity : null,
+    windSpeed: isLiveBackend && liveWeather ? liveWeather.windSpeed : null,
+    solarRadiation: isLiveBackend && liveWeather ? liveWeather.solarRadiation : null,
+    heatIndex: liveThermal?.heatIndex ?? null,
+    heatIndexStatus: liveThermal?.heatIndexStatus ?? null,
+    wbgt: liveThermal?.wbgt ?? null,
+    wbgtType: liveThermal?.wbgtType ?? null,
+    wbgtMethod: liveThermal?.wbgtMethod ?? null,
+    utci: liveThermal?.utci ?? null,
+    utciType: liveThermal?.utciType ?? null,
+    utciStatus: liveThermal?.utciStatus ?? null,
+    thermalStressScore: liveThermal?.thermalStressScore ?? null,
+    thermalStressCategory: liveThermal?.thermalStressCategory ?? null,
+    riskScore: liveRisk?.riskScore ?? null,
+    riskCategory: liveRisk?.riskCategory ?? null,
+    mainRiskFactor: liveRisk?.explanation ?? null,
+    vulnerabilityScore: liveRisk?.vulnerabilityScore ?? null,
+    vulnerabilityFactors: liveRisk?.vulnerabilityFactors ?? null,
+    predictedRisk: livePrediction?.prediction?.predicted_risk_score ?? null,
+    predictedCategory: livePrediction?.prediction?.predicted_risk_category ?? null,
+    trend: livePrediction?.prediction?.trend ?? null,
+    trendDiff: livePrediction?.prediction?.trend_diff ?? null,
+    alertLevel: liveAlert?.alert?.level ?? null,
+    alertPriority: liveAlert?.alert?.priority ?? null,
+    alertTitle: liveAlert?.alert?.title ?? null,
+    alertMessage: liveAlert?.alert?.message ?? null,
+    recommendedActions: liveAlert?.recommended_actions ?? null,
+    forecast: liveForecast ?? null,
+    nearbySummary: liveNearby ?? null,
+    lastUpdated: lastUpdatedTime ?? null,
   };
 
   // Single area analysis switch (dropdown, nearby alert, or map popup click)
@@ -848,7 +859,8 @@ export function App() {
       area: area.area || area.name || "Selected Area",
       latitude: area.latitude != null ? Number(area.latitude) : 16.8152,
       longitude: area.longitude != null ? Number(area.longitude) : 81.5267,
-      ...area,
+      mandals: area.mandals || "",
+      vulnerablePopulation: area.vulnerablePopulation || 0,
     };
     setSelectedLocation(normalizedArea);
     setNotifications(generateAreaNotifications(normalizedArea));

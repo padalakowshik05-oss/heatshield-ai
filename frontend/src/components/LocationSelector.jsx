@@ -36,8 +36,8 @@ export function LocationSelector({
         area: found.name,
         latitude: found.latitude,
         longitude: found.longitude,
-        ...found,
-        mode: "manual",
+        mandals: found.mandals,
+        vulnerablePopulation: found.vulnerablePopulation,
       };
       onAnalyzeArea(manualLocObj);
     }
@@ -80,12 +80,10 @@ export function LocationSelector({
           name: closestMandal ? `My Location (${closestMandal.name})` : "Current Location",
           district: districts.find((d) => d.id === selectedDistrict)?.name || "West Godavari",
           area: closestMandal ? closestMandal.name : "Current Location",
-          ...(closestMandal || {}),
           latitude: lat,
           longitude: lng,
-          mode: "current",
-          name: closestMandal ? `My Location (${closestMandal.name})` : "Current Location",
-          area: closestMandal ? closestMandal.name : "Current Location",
+          mandals: closestMandal?.mandals,
+          vulnerablePopulation: closestMandal?.vulnerablePopulation,
         };
 
         if (onAnalyzeArea) {

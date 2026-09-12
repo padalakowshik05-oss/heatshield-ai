@@ -21,16 +21,10 @@ export function ForecastChart({
 }) {
   const locName = location?.name || "Tadepalligudem";
 
-  // Priority: live forecastData -> location.forecast -> default fallback
+  // Priority: live forecastData -> location.forecast -> empty (never fake demo data)
   const rawList = forecastData && forecastData.length > 0
     ? forecastData
-    : (location?.forecast || [
-        { day: "Today", temp: 34.0, temperature: 34.0, heat_risk_indicator: 60, riskScore: 60, category: "HIGH" },
-        { day: "Tomorrow", temp: 35.0, temperature: 35.0, heat_risk_indicator: 63, riskScore: 63, category: "HIGH" },
-        { day: "Day 3", temp: 36.0, temperature: 36.0, heat_risk_indicator: 66, riskScore: 66, category: "HIGH" },
-        { day: "Day 4", temp: 34.5, temperature: 34.5, heat_risk_indicator: 58, riskScore: 58, category: "HIGH" },
-        { day: "Day 5", temp: 33.0, temperature: 33.0, heat_risk_indicator: 52, riskScore: 52, category: "HIGH" },
-      ]);
+    : (location?.forecast && location.forecast.length > 0 ? location.forecast : []);
 
   const chartData = rawList.map((item) => {
     const tempVal = item.temperature ?? item.temp ?? 32.0;
@@ -139,6 +133,20 @@ export function ForecastChart({
               </button>
             )}
           </div>
+        ) : chartData.length === 0 ? (
+          <div className="h-44 sm:h-48 flex flex-col items-center justify-center gap-2 text-xs text-slate-400 font-mono">
+            <CloudSun className="w-6 h-6 text-slate-500" />
+            <span className="text-slate-300">5-day synoptic forecast data unavailable for {locName}.</span>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="mt-1 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded border border-slate-700 flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Retry Forecast</span>
+              </button>
+            )}
+          </div>
         ) : (
           /* Recharts Canvas */
           <div className="h-44 sm:h-48 w-full pt-1">
@@ -209,21 +217,23 @@ export function ForecastChart({
       </div>
 
       {/* Quick 5-day trajectory summary tiles */}
-      <div className="pt-2.5 mt-2 border-t border-slate-800 grid grid-cols-5 gap-1.5 text-center font-mono text-[11px]">
-        {chartData.map((d, i) => (
-          <div key={i} className="bg-slate-950 p-1.5 rounded border border-slate-800/80">
-            <span className="text-[10px] text-slate-400 block truncate">{d.day}</span>
-            <span className="font-bold text-white block mt-0.5">{d.temp}°C</span>
-            <span
-              className={`text-[9px] font-bold block ${
-                d.riskScore >= 75 ? "text-red-400" : d.riskScore >= 50 ? "text-orange-400" : "text-amber-400"
-              }`}
-            >
-              Risk {d.riskScore}
-            </span>
-          </div>
-        ))}
-      </div>
+      {chartData.length > 0 && (
+        <div className="pt-2.5 mt-2 border-t border-slate-800 grid grid-cols-5 gap-1.5 text-center font-mono text-[11px]">
+          {chartData.map((d, i) => (
+            <div key={i} className="bg-slate-950 p-1.5 rounded border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block truncate">{d.day}</span>
+              <span className="font-bold text-white block mt-0.5">{d.temp}°C</span>
+              <span
+                className={`text-[9px] font-bold block ${
+                  d.riskScore >= 75 ? "text-red-400" : d.riskScore >= 50 ? "text-orange-400" : "text-amber-400"
+                }`}
+              >
+                Risk {d.riskScore}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Scientific Distinction Footnote */}
       <div className="mt-2 pt-1.5 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">

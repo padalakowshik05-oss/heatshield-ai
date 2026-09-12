@@ -8,20 +8,11 @@ export function RiskOverview({
   isLive = false,
   onRetry,
 }) {
-  const loc = location || {
-    name: "Tadepalligudem",
-    riskScore: 39.5,
-    riskCategory: "MODERATE",
-    thermalStressScore: 32.8,
-    vulnerabilityScore: 55.0,
-    heatIndex: 32.8,
-    wbgt: 26.7,
-    utci: 30.8,
-    mainRiskFactor: "Population vulnerability is significantly increasing the overall heat-health risk.",
-  };
+  const loc = location || {};
 
-  const finalScore = loc.riskScore != null ? loc.riskScore : (loc.thermalStressScore ?? 0);
-  const currentCategory = loc.riskCategory || loc.thermalStressCategory || "MODERATE";
+  const hasRisk = loc.riskScore != null || loc.thermalStressScore != null;
+  const finalScore = loc.riskScore != null ? loc.riskScore : (loc.thermalStressScore ?? null);
+  const currentCategory = loc.riskCategory || loc.thermalStressCategory || (hasRisk ? "MODERATE" : "EVALUATING");
 
   const getStyle = (category) => {
     switch (category) {
@@ -61,7 +52,8 @@ export function RiskOverview({
   // SVG circular gauge
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (Math.min(Math.max(finalScore, 0), 100) / 100) * circumference;
+  const scoreForGauge = finalScore != null ? Math.min(Math.max(finalScore, 0), 100) : 0;
+  const strokeDashoffset = circumference - (scoreForGauge / 100) * circumference;
 
   const estimationTooltip = "Estimated from available meteorological data. Dedicated globe/wet-bulb/radiation measurements are not available.";
 
@@ -81,7 +73,7 @@ export function RiskOverview({
             </span>
           ) : (
             <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-slate-800 text-slate-400 border border-slate-700">
-              LOCAL BASELINE
+              AWAITING LIVE DATA
             </span>
           )}
         </div>
@@ -96,7 +88,7 @@ export function RiskOverview({
           <span
             className={`px-2.5 py-0.5 text-xs font-mono font-bold uppercase tracking-wider rounded-md ${style.badgeBg}`}
           >
-            {currentCategory}
+            {finalScore != null ? currentCategory : "--"}
           </span>
         </div>
       </div>
@@ -106,7 +98,7 @@ export function RiskOverview({
         <div className="my-2 p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/60 flex items-center justify-between text-xs text-amber-300">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Unable to calculate full risk assessment. Showing verified station baseline.</span>
+            <span>Unable to calculate full risk assessment: {error}</span>
           </div>
           {onRetry && (
             <button

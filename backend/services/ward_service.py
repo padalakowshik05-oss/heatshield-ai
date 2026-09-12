@@ -401,28 +401,124 @@ def normalize_area_key(name: str) -> str:
 
 def get_wards_for_locality(area_name: str) -> Optional[Dict[str, Any]]:
     """
-    Retrieve ward-level prototype dataset for an urban locality.
-    Returns None if locality is outside the prototype coverage dataset.
+    Retrieve ward-level real-time biometeorological dataset for an urban locality.
+    Obtains live Open-Meteo observations for each ward coordinate in a batch request,
+    calculates real-time thermal metrics, vulnerability score, and composite heat-health risk.
     """
+    import requests
+    from services.thermal_service import calculate_thermal_metrics
+    from services.risk_service import calculate_final_risk
+
     key = normalize_area_key(area_name)
-    wards = WARDS_BY_LOCALITY.get(key)
-    if not wards:
+    base_wards = WARDS_BY_LOCALITY.get(key)
+    if not base_wards:
         return None
 
     # Capitalized display name
-    if "tpg" in wards[0]["id"]:
+    if "tpg" in base_wards[0]["id"]:
         display_name = "Tadepalligudem"
-    elif "bvrm" in wards[0]["id"]:
+    elif "bvrm" in base_wards[0]["id"]:
         display_name = "Bhimavaram"
-    elif "tnk" in wards[0]["id"]:
+    elif "tnk" in base_wards[0]["id"]:
         display_name = "Tanuku"
     else:
         display_name = area_name
 
+    lats = ",".join([str(w["latitude"]) for w in base_wards])
+    lons = ",".join([str(w["longitude"]) for w in base_wards])
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lats,
+        "longitude": lons,
+        "current": [
+            "temperature_2m",
+            "relative_humidity_2m",
+            "wind_speed_10m",
+            "shortwave_radiation"
+        ]
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        raw_list = response.json()
+        if not isinstance(raw_list, list):
+            raw_list = [raw_list]
+    except Exception as exc:
+        # If Open-Meteo is unavailable, clearly report it
+        live_wards = []
+        for w in base_wards:
+            w_copy = dict(w)
+            w_copy["is_live"] = False
+            w_copy["data_source"] = "Prototype baseline (Open-Meteo offline)"
+            w_copy["error"] = f"Unable to fetch real-time weather: {str(exc)}"
+            live_wards.append(w_copy)
+
+        return {
+            "area": display_name,
+            "data_type": "prototype",
+            "live_data_available": False,
+            "error": str(exc),
+            "disclaimer": "Ward risk values are prototype estimates because Open-Meteo is temporarily unreachable.",
+            "count": len(live_wards),
+            "wards": live_wards
+        }
+
+    live_wards = []
+    for i, w in enumerate(base_wards):
+        w_copy = dict(w)
+        res = raw_list[i] if i < len(raw_list) else {}
+        curr = res.get("current", {})
+
+        temp = curr.get("temperature_2m")
+        humidity = curr.get("relative_humidity_2m")
+        wind = curr.get("wind_speed_10m", 10.0)
+        solar = curr.get("shortwave_radiation", 500.0)
+
+        if temp is not None and humidity is not None:
+            try:
+                thermal = calculate_thermal_metrics(
+                    temperature=float(temp),
+                    humidity=float(humidity),
+                    wind_speed=float(wind),
+                    solar_radiation=float(solar),
+                    latitude=float(w["latitude"]),
+                    longitude=float(w["longitude"])
+                )
+                thermal_score = float(thermal.get("thermal_stress_score", 50.0))
+            except Exception:
+                thermal_score = 50.0
+
+            # Normalized demographic vulnerability factor based on vulnerable_population (range 35 to 75)
+            vuln_pop = float(w.get("vulnerable_population", 1200))
+            vuln_score = round(min(75.0, max(35.0, 35.0 + (vuln_pop / 50.0))), 1)
+
+            # Combined risk score = 0.70 * thermal + 0.30 * vulnerability
+            final_risk = round(calculate_final_risk(thermal_score, vuln_score), 1)
+            cat = calculate_risk_category(final_risk)
+
+            w_copy["temperature"] = round(temp, 1)
+            w_copy["humidity"] = round(humidity, 1)
+            w_copy["wind_speed"] = round(wind, 1)
+            w_copy["solar_radiation"] = round(solar, 1)
+            w_copy["thermal_stress_score"] = round(thermal_score, 1)
+            w_copy["vulnerability_score"] = vuln_score
+            w_copy["risk_score"] = final_risk
+            w_copy["risk_category"] = cat
+            w_copy["alert_level"] = cat
+            w_copy["is_live"] = True
+            w_copy["data_source"] = "Live weather-model data"
+        else:
+            w_copy["is_live"] = False
+            w_copy["data_source"] = "Prototype baseline"
+
+        live_wards.append(w_copy)
+
     return {
         "area": display_name,
-        "data_type": "prototype",
-        "disclaimer": "Ward-level risk values are prototype estimates for demonstration.",
-        "count": len(wards),
-        "wards": wards
+        "data_type": "live_model",
+        "live_data_available": True,
+        "disclaimer": "Live weather-model data derived from Open-Meteo biometeorological observations and demographic vulnerability modeling. Not physical sensor measurements.",
+        "count": len(live_wards),
+        "wards": live_wards
     }

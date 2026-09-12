@@ -16,18 +16,18 @@ const SUGGESTED_QUESTIONS = [
 export function AIAssistant({ selectedLocation }) {
   const loc = selectedLocation || {
     name: "Tadepalligudem",
-    riskScore: 86,
-    riskCategory: "EXTREME",
-    temperature: 41.2,
-    humidity: 68,
-    solarRadiation: 812,
+    latitude: 16.8152,
+    longitude: 81.5267,
   };
+
+  const riskDisplay = loc.riskScore != null ? `${loc.riskScore}/100` : "Assessing...";
+  const catDisplay = loc.riskCategory ? ` • ${loc.riskCategory}` : "";
 
   const [messages, setMessages] = useState([
     {
       id: "welcome",
       sender: "ai",
-      text: `Hello! I am your **HeatShield AI Decision Support Assistant** for West Godavari.\n\nCurrently analyzing **${loc.name}** (Risk: ${loc.riskScore ?? 60}/100 • ${loc.riskCategory ?? "HIGH"}).\n\nAsk me about biometeorological attribution, physiological heat strain, 6-hour projections, or advised municipal countermeasures.`,
+      text: `Hello! I am your **HeatShield AI Decision Support Assistant** for West Godavari.\n\nCurrently analyzing **${loc.name}** (Risk: ${riskDisplay}${catDisplay}).\n\nAsk me about biometeorological attribution, physiological heat strain, 6-hour projections, or advised municipal countermeasures.`,
       time: "Active Context",
     },
   ]);
@@ -53,11 +53,13 @@ export function AIAssistant({ selectedLocation }) {
 
   // When selectedLocation changes, switch context
   useEffect(() => {
+    const rDisp = loc.riskScore != null ? `${loc.riskScore}/100` : "Assessing...";
+    const cDisp = loc.riskCategory ? ` • ${loc.riskCategory}` : "";
     setMessages([
       {
         id: `context-${loc.name}-${Date.now()}`,
         sender: "ai",
-        text: `Switched context to **${loc.name}** (Risk: ${loc.riskScore ?? 60}/100 • ${loc.riskCategory ?? "HIGH"}).\n\nHow can I assist with local heat health countermeasures?`,
+        text: `Switched context to **${loc.name}** (Risk: ${rDisp}${cDisp}).\n\nHow can I assist with local heat health countermeasures?`,
         time: "Just now",
       },
     ]);
@@ -92,12 +94,14 @@ export function AIAssistant({ selectedLocation }) {
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
+      const tempText = loc.temperature != null ? `high temperature (${loc.temperature}°C)` : "elevated ambient temperature";
+      const humidText = loc.humidity != null ? `elevated humidity (${loc.humidity}%)` : "humidity";
       setMessages((prev) => [
         ...prev,
         {
           id: `ai-err-${Date.now()}`,
           sender: "ai",
-          text: `The combination of high temperature (${loc.temperature}°C), elevated humidity (${loc.humidity}%), and intense solar radiation in ${loc.name} impairs human evaporative cooling, requiring urgent municipal shade and hydration directives.`,
+          text: `The combination of ${tempText} and ${humidText} in ${loc.name} impairs human evaporative cooling, requiring urgent municipal shade and hydration directives.`,
           time: "Offline Fallback",
         },
       ]);

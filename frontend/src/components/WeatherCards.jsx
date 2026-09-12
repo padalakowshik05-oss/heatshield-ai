@@ -7,12 +7,7 @@ export function WeatherCards({
   isLive = false,
   onRetry,
 }) {
-  const loc = location || {
-    temperature: 41.2,
-    humidity: 68,
-    windSpeed: 8,
-    solarRadiation: 812,
-  };
+  const loc = location || {};
 
   const cards = [
     {
@@ -52,7 +47,7 @@ export function WeatherCards({
         <div className="flex items-center justify-between text-xs text-slate-300 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 mb-2 font-mono">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-amber-300 font-sans">Loading weather...</span>
+            <span className="text-amber-300 font-sans">Loading live weather from Open-Meteo...</span>
           </div>
           <span className="text-[10px] text-slate-500">Open-Meteo Synoptic API</span>
         </div>
@@ -62,7 +57,7 @@ export function WeatherCards({
         <div className="flex items-center justify-between text-xs text-amber-200 bg-amber-950/40 border border-amber-800/60 rounded-lg px-3 py-1.5 mb-2">
           <div className="flex items-center gap-2">
             <span className="text-sm">⚠️</span>
-            <span>Unable to load live weather data. Showing demo baseline.</span>
+            <span>Unable to load live weather data. {error}</span>
           </div>
           {onRetry && (
             <button

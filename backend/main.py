@@ -176,6 +176,20 @@ app.add_api_route(
     tags=["Explanation"]
 )
 
+# Root-level Wards API alias
+@app.get("/wards/{area_name}", tags=["Wards"])
+def get_wards_alias(area_name: str):
+    """Root alias for /risk/wards/{area_name} providing real-time ward data."""
+    from services.ward_service import get_wards_for_locality
+    from fastapi import HTTPException
+    data = get_wards_for_locality(area_name)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ward-level data not available for locality '{area_name}'."
+        )
+    return data
+
 
 @app.on_event("startup")
 def on_startup():

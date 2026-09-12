@@ -3,22 +3,18 @@ import React from "react";
 export function Forecast({ location }) {
   const loc = location || {
     name: "Tadepalligudem",
-    forecast: [
-      { day: "Today", temp: 41.2, category: "EXTREME" },
-      { day: "Tomorrow", temp: 42.0, category: "EXTREME" },
-      { day: "Day 3", temp: 40.5, category: "HIGH" },
-      { day: "Day 4", temp: 39.2, category: "HIGH" },
-      { day: "Day 5", temp: 38.0, category: "MODERATE" },
-    ],
+    forecast: [],
   };
 
-  const forecastData = loc.forecast || [
-    { day: "Today", temp: loc.temperature, category: loc.riskCategory },
-    { day: "Tomorrow", temp: Math.round(loc.temperature + 0.5), category: loc.riskCategory },
-    { day: "Day 3", temp: Math.round(loc.temperature - 1.0), category: "HIGH" },
-    { day: "Day 4", temp: Math.round(loc.temperature - 2.0), category: "HIGH" },
-    { day: "Day 5", temp: Math.round(loc.temperature - 3.0), category: "MODERATE" },
-  ];
+  const forecastData = loc.forecast || [];
+
+  if (!forecastData || forecastData.length === 0) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 shadow-xs text-center text-xs text-slate-400 font-mono">
+        Forecast data unavailable for {loc.name}.
+      </div>
+    );
+  }
 
   const getBadgeStyle = (category) => {
     switch (category) {

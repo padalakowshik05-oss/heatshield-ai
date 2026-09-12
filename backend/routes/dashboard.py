@@ -56,101 +56,113 @@ def get_dashboard_summary(
     timestamp_iso = now_utc.isoformat()
     last_updated_hhmm = now_utc.strftime("%H:%M UTC")
 
-    # 1. Real Weather
+    # 1. Real Weather from Open-Meteo
     weather_err = None
     try:
         weather = get_current_weather(lat, lon)
     except Exception as exc:
         weather_err = str(exc)
-        weather = {
-            "temperature": 34.0,
-            "humidity": 65.0,
-            "wind_speed": 10.0,
-            "solar_radiation": 500.0,
-            "timestamp": timestamp_iso
-        }
+        weather = None
 
-    temp = float(weather.get("temperature", 34.0))
-    humidity = float(weather.get("humidity", 65.0))
-    wind = float(weather.get("wind_speed", 10.0))
-    solar = float(weather.get("solar_radiation", 500.0))
+    if weather and weather.get("temperature") is not None:
+        temp = float(weather.get("temperature"))
+        humidity = float(weather.get("humidity"))
+        wind = float(weather.get("wind_speed", 10.0))
+        solar = float(weather.get("solar_radiation", 500.0))
 
-    # 2. Thermal Stress
-    thermal_err = None
-    try:
-        thermal = calculate_thermal_metrics(
-            temperature=temp,
-            humidity=humidity,
-            wind_speed=wind,
-            solar_radiation=solar,
-            latitude=lat,
-            longitude=lon
-        )
-    except Exception as exc:
-        thermal_err = str(exc)
-        thermal = {
-            "heat_index": {"value": temp + 4.0},
-            "wbgt": {"value": 30.0},
-            "utci": {"value": 38.0},
-            "thermal_stress_score": 60.0,
-            "thermal_stress_category": "HIGH"
-        }
+        # 2. Thermal Stress Engine
+        thermal_err = None
+        try:
+            thermal = calculate_thermal_metrics(
+                temperature=temp,
+                humidity=humidity,
+                wind_speed=wind,
+                solar_radiation=solar,
+                latitude=lat,
+                longitude=lon
+            )
+            thermal_score = float(thermal.get("thermal_stress_score", 50.0))
+        except Exception as exc:
+            thermal_err = str(exc)
+            thermal = None
+            thermal_score = None
 
-    thermal_score = float(thermal.get("thermal_stress_score", 60.0))
-    vuln_score = float(vuln_data.get("vulnerability_score", 50.0))
+        vuln_score = float(vuln_data.get("vulnerability_score", 50.0))
 
-    # 3. Final Risk Assessment
-    risk_score = calculate_final_risk(thermal_score, vuln_score)
-    risk_category = get_risk_category(risk_score)
-    risk_explanation = get_risk_explanation(thermal_score, vuln_score)
+        # 3. Final Risk Assessment
+        if thermal_score is not None:
+            risk_score = calculate_final_risk(thermal_score, vuln_score)
+            risk_category = get_risk_category(risk_score)
+            risk_explanation = get_risk_explanation(thermal_score, vuln_score)
+        else:
+            risk_score = None
+            risk_category = None
+            risk_explanation = "Thermal stress calculation unavailable."
 
-    # 4. ML Future-Risk Prediction (6h)
-    pred_data = None
-    pred_err = None
-    try:
-        pred_data = predict_future_risk(
-            current_weather=weather,
-            current_thermal=thermal,
-            vulnerability_data=vuln_data,
-            current_risk_score=risk_score
-        )
-    except Exception as exc:
-        pred_err = f"Prediction unavailable: {str(exc)}"
+        # 4. ML Future-Risk Prediction (6h)
+        pred_data = None
+        pred_err = None
+        if thermal:
+            try:
+                pred_data = predict_future_risk(
+                    current_weather=weather,
+                    current_thermal=thermal,
+                    vulnerability_data=vuln_data,
+                    current_risk_score=risk_score
+                )
+            except Exception as exc:
+                pred_err = f"Prediction unavailable: {str(exc)}"
 
-    pred_score = pred_data.get("predicted_risk_score", risk_score) if pred_data else risk_score
+        pred_score = pred_data.get("predicted_risk_score", risk_score) if pred_data else (risk_score or 50.0)
 
-    # 5. SHAP Feature Attribution
-    explanation = None
-    try:
-        explanation = compute_shap_explanation(
-            current_weather=weather,
-            current_thermal=thermal,
-            vulnerability_data=vuln_data,
-            current_risk_score=risk_score,
+        # 5. SHAP Feature Attribution
+        explanation = None
+        if thermal and risk_score is not None:
+            try:
+                explanation = compute_shap_explanation(
+                    current_weather=weather,
+                    current_thermal=thermal,
+                    vulnerability_data=vuln_data,
+                    current_risk_score=risk_score,
+                    area_name=vuln_data["area"],
+                    top_k=5
+                )
+            except Exception:
+                explanation = None
+
+        # 6. Intelligent Heat Alert
+        alert = generate_heat_alert(
+            current_risk_score=risk_score or 0.0,
+            predicted_risk_score=pred_score,
             area_name=vuln_data["area"],
-            top_k=5
+            weather=weather,
+            thermal=thermal
+        ) if risk_score is not None else None
+
+        # 7. Recommended Public Health Actions
+        actions = get_recommended_actions(
+            alert_level=alert.get("level", "LOW") if alert else "LOW",
+            top_factors=explanation.get("top_factors", []) if explanation else [],
+            max_actions=5
         )
-    except Exception:
-        explanation = {
-            "top_factors": [],
-            "summary": "Thermal stress combined with demographic factors drives current risk."
-        }
-
-    # 6. Intelligent Heat Alert
-    alert = generate_heat_alert(
-        current_risk_score=risk_score,
-        predicted_risk_score=pred_score,
-        area_name=vuln_data["area"],
-        weather=weather,
-        thermal=thermal
-    )
-
-    # 7. Recommended Public Health Actions
-    actions = get_recommended_actions(
-        alert_level=alert.get("level", "LOW"),
-        top_factors=explanation.get("top_factors", []),
-        max_actions=5
-    )
+    else:
+        # Weather is unavailable: do NOT fabricate fake values
+        temp = None
+        humidity = None
+        wind = None
+        solar = None
+        thermal = None
+        thermal_err = "Cannot compute thermal metrics without live meteorological data."
+        thermal_score = None
+        vuln_score = float(vuln_data.get("vulnerability_score", 50.0))
+        risk_score = None
+        risk_category = None
+        risk_explanation = "Live weather data unavailable."
+        pred_data = None
+        pred_err = "Cannot predict future risk without live meteorological data."
+        explanation = None
+        alert = None
+        actions = []
 
     # 8. Real 5-Day Open-Meteo Synoptic Forecast
     forecast_data = None
@@ -174,24 +186,25 @@ def get_dashboard_summary(
         "last_updated": last_updated_hhmm,
         "timestamp": timestamp_iso,
         "weather": {
-            "temperature": round(temp, 1),
-            "humidity": round(humidity, 1),
-            "wind_speed": round(wind, 1),
-            "solar_radiation": round(solar, 1),
-            "timestamp": weather.get("timestamp", timestamp_iso),
+            "temperature": round(temp, 1) if temp is not None else None,
+            "humidity": round(humidity, 1) if humidity is not None else None,
+            "wind_speed": round(wind, 1) if wind is not None else None,
+            "solar_radiation": round(solar, 1) if solar is not None else None,
+            "timestamp": weather.get("timestamp", timestamp_iso) if weather else None,
+            "is_live": True if (weather and temp is not None) else False,
             "error": weather_err
         },
         "thermal": {
-            "heat_index": thermal.get("heat_index", {}).get("value"),
-            "estimated_wbgt": thermal.get("wbgt", {}).get("value"),
-            "estimated_utci": thermal.get("utci", {}).get("value"),
-            "thermal_stress_score": round(thermal_score, 1),
-            "thermal_stress_category": thermal.get("thermal_stress_category", "MODERATE"),
+            "heat_index": thermal.get("heat_index", {}).get("value") if thermal else None,
+            "estimated_wbgt": thermal.get("wbgt", {}).get("value") if thermal else None,
+            "estimated_utci": thermal.get("utci", {}).get("value") if thermal else None,
+            "thermal_stress_score": round(thermal_score, 1) if thermal_score is not None else None,
+            "thermal_stress_category": thermal.get("thermal_stress_category") if thermal else None,
             "error": thermal_err
         },
         "vulnerability": vuln_data,
         "risk": {
-            "score": round(risk_score, 1),
+            "score": round(risk_score, 1) if risk_score is not None else None,
             "category": risk_category,
             "explanation": risk_explanation
         },

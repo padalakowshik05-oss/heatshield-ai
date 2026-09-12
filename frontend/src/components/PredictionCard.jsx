@@ -19,7 +19,7 @@ export function PredictionCard({
   isLive = false,
   onRetry = null,
 }) {
-  // Extract values from live backend prediction or fallback to location properties
+  // Extract values from live backend prediction or location properties
   const predictedScore =
     predictionData?.prediction?.predicted_risk_score != null
       ? Number(predictionData.prediction.predicted_risk_score).toFixed(1)
@@ -30,7 +30,7 @@ export function PredictionCard({
   const predictedCategory =
     predictionData?.prediction?.predicted_risk_category ||
     location?.predictedCategory ||
-    "MODERATE";
+    (predictedScore ? "MODERATE" : "--");
 
   const currentScore =
     predictionData?.current?.risk_score != null

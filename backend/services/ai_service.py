@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any, List, Optional
 import httpx
 
-from services.weather_service import get_weather
+from services.weather_service import get_weather, get_current_weather
 from services.thermal_service import calculate_thermal_metrics
 from services.vulnerability_service import get_vulnerability_data, WEST_GODAVARI_VULNERABILITY
 from services.risk_service import calculate_final_risk, get_risk_category
@@ -113,7 +113,7 @@ def build_heatshield_context(
 
     # 1. Weather
     try:
-        weather = get_weather(lat, lon)
+        weather = get_current_weather(lat, lon)
     except Exception:
         weather = {"temperature": 34.0, "humidity": 65.0, "wind_speed": 10.0, "solar_radiation": 500.0}
 
